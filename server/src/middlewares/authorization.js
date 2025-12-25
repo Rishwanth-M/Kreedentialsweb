@@ -32,15 +32,24 @@ const authorization = (req, res, next) => {
       });
     }
 
-    console.log("✅ Token verified. User:", decoded.user);
+    // 🔴 FIX 2 (THIS IS THE IMPORTANT PART)
+    if (!decoded || !decoded.user || !decoded.user._id) {
+      console.log("❌ Token decoded but user payload is invalid:", decoded);
+      return res.status(401).json({
+        message: "Invalid token payload",
+        status: "Failed",
+      });
+    }
+
+    console.log("✅ Token verified for user:", decoded.user._id);
 
     req.user = decoded.user;
     next();
 
   } catch (error) {
-    console.log("❌ Authorization error:", error.message);
+    console.log("❌ Authorization middleware crash:", error.message);
     return res.status(500).json({
-      message: error.message,
+      message: "Authorization failed",
       status: "Failed",
     });
   }
