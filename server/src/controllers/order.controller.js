@@ -1,30 +1,66 @@
-const router = require('express').Router();
-const authorization = require('../middlewares/authorization');
-const Order = require('../models/order.model');
+const { Schema, model } = require("mongoose");
 
+const reqString = { type: String, required: true };
+const reqNumber = { type: Number, required: true };
+const reqArray = { type: Array, required: true };
 
-router.post('/', authorization, async (req, res) => {
-    try {
-        const order = await Order.create({ ...req.body, user: req.user._id });
+const orderSchema = new Schema(
+  {
+    orderSummary: {
+      subTotal: reqNumber,
+      quantity: reqNumber,
+      shipping: reqNumber,
+      discount: reqNumber,
+      total: reqNumber,
+    },
 
-        return res.status(201).json(order);
+    cartProducts: [
+      {
+        title: reqString,
+        gender: reqString,
+        description: reqString,
+        category: reqString,
+        price: reqNumber,
+        size: reqString,
+        color: reqString,
+        rating: reqNumber,
+        img: reqArray,
+        quantity: reqNumber,
+      },
+    ],
 
-    } catch (error) {
-        return res.status(500).json({ message: 'Internal server error!' });
-    }
-});
+    // ✅ UPDATED: supports DEMO + real payments
+    paymentDetails: {
+      orderId: { type: String },
+      razorpayOrderId: { type: String },
+      razorpayPaymentId: { type: String },
+      paymentMode: { type: String },     // DEMO / RAZORPAY
+      paymentStatus: { type: String },   // SUCCESS / FAILED
+    },
 
+    shippingDetails: {
+      firstName: reqString,
+      lastName: reqString,
+      addressLine1: reqString,
+      addressLine2: { type: String },
+      locality: reqString,
+      pinCode: reqNumber,
+      state: reqString,
+      country: reqString,
+      email: reqString,
+      mobile: reqNumber,
+    },
 
-router.get('/', authorization, async (req, res) => {
-    try {
-        const order = await Order.find({ user: req.user._id }).lean().exec();
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "user",
+      required: true,
+    },
+  },
+  {
+    versionKey: false,
+    timestamps: true,
+  }
+);
 
-        return res.status(201).json(order);
-
-    } catch (error) {
-        return res.status(500).json({ message: 'Internal server error!' });
-    }
-});
-
-
-module.exports = router;
+module.exports = model("order", orderSchema);
