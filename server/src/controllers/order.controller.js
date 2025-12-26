@@ -1,66 +1,76 @@
-const { Schema, model } = require("mongoose");
+const router = require("express").Router();
+const authorization = require("../middlewares/authorization");
+const Order = require("../models/order.model");
 
-const reqString = { type: String, required: true };
-const reqNumber = { type: Number, required: true };
-const reqArray = { type: Array, required: true };
+/**
+ * CREATE ORDER
+ */
+router.post("/", authorization, async (req, res) => {
+  try {
+    console.log("📦 Incoming order payload:", req.body);
+    console.log("👤 Order user:", req.user._id);
 
-const orderSchema = new Schema(
-  {
-    orderSummary: {
-      subTotal: reqNumber,
-      quantity: reqNumber,
-      shipping: reqNumber,
-      discount: reqNumber,
-      total: reqNumber,
-    },
+    const {
+      cartProducts,
+      orderSummary,
+      paymentDetails,
+      shippingDetails,
+    } = req.body;
 
-    cartProducts: [
-      {
-        title: reqString,
-        gender: reqString,
-        description: reqString,
-        category: reqString,
-        price: reqNumber,
-        size: reqString,
-        color: reqString,
-        rating: reqNumber,
-        img: reqArray,
-        quantity: reqNumber,
-      },
-    ],
+    // 🔒 Safety validations
+    if (!cartProducts || cartProducts.length === 0) {
+      return res.status(400).json({ message: "Cart products missing" });
+    }
 
-    // ✅ UPDATED: supports DEMO + real payments
-    paymentDetails: {
-      orderId: { type: String },
-      razorpayOrderId: { type: String },
-      razorpayPaymentId: { type: String },
-      paymentMode: { type: String },     // DEMO / RAZORPAY
-      paymentStatus: { type: String },   // SUCCESS / FAILED
-    },
+    if (!orderSummary || !orderSummary.total) {
+      return res.status(400).json({ message: "Order summary missing" });
+    }
 
-    shippingDetails: {
-      firstName: reqString,
-      lastName: reqString,
-      addressLine1: reqString,
-      addressLine2: { type: String },
-      locality: reqString,
-      pinCode: reqNumber,
-      state: reqString,
-      country: reqString,
-      email: reqString,
-      mobile: reqNumber,
-    },
+    if (!shippingDetails || !shippingDetails.addressLine1) {
+      return res.status(400).json({ message: "Shipping details missing" });
+    }
 
-    user: {
-      type: Schema.Types.ObjectId,
-      ref: "user",
-      required: true,
-    },
-  },
-  {
-    versionKey: false,
-    timestamps: true,
+    const order = await Order.create({
+      cartProducts,
+      orderSummary,
+      paymentDetails,
+      shippingDetails,
+      user: req.user._id,
+    });
+
+    console.log("✅ Order created successfully:", order._id);
+
+    return res.status(201).json(order);
+
+  } catch (error) {
+    console.error("❌ Order creation failed:", error);
+
+    return res.status(500).json({
+      message: "Order creation failed",
+      error: error.message, // keep during dev
+    });
   }
-);
+});
 
-module.exports = model("order", orderSchema);
+/**
+ * GET USER ORDERS
+ */
+router.get("/", authorization, async (req, res) => {
+  try {
+    const orders = await Order.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+
+    return res.status(200).json(orders);
+
+  } catch (error) {
+    console.error("❌ Fetch orders failed:", error);
+
+    return res.status(500).json({
+      message: "Failed to fetch orders",
+    });
+  }
+});
+
+module.exports = router;
