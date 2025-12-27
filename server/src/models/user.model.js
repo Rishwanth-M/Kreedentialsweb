@@ -1,9 +1,10 @@
-const { Schema, model } = require('mongoose');
-const bcrypt = require('bcryptjs');
+const { Schema, model } = require("mongoose");
+const bcrypt = require("bcryptjs");
 
 const reqString = { type: String, required: true };
 
-const addressSchema = new Schema({
+const addressSchema = new Schema(
+  {
     firstName: String,
     lastName: String,
     addressLine1: String,
@@ -12,14 +13,20 @@ const addressSchema = new Schema({
     pinCode: String,
     state: String,
     country: String,
-    mobile: String,
-    createdAt: {
-        type: Date,
-        default: Date.now
-    }
-}, { _id: false });
 
-const userSchema = new Schema({
+    email: String,      // ✅ ADD THIS
+    mobile: String,
+
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
+const userSchema = new Schema(
+  {
     firstName: reqString,
     lastName: reqString,
     email: reqString,
@@ -27,27 +34,28 @@ const userSchema = new Schema({
     gender: reqString,
     dateOfBirth: reqString,
 
-    // ✅ NEW (Safe addition)
     addresses: {
-        type: [addressSchema],
-        default: []
-    }
-}, {
+      type: [addressSchema],
+      default: [],
+    },
+  },
+  {
     versionKey: false,
-    timestamps: true
-});
+    timestamps: true,
+  }
+);
 
-userSchema.pre('save', function (next) {
-    if (!this.isModified("password")) return next();
+userSchema.pre("save", function (next) {
+  if (!this.isModified("password")) return next();
 
-    bcrypt.hash(this.password, 8, (err, hash) => {
-        this.password = hash;
-        next();
-    });
+  bcrypt.hash(this.password, 8, (err, hash) => {
+    this.password = hash;
+    next();
+  });
 });
 
 userSchema.methods.checkPassword = async function (password) {
-    return bcrypt.compare(password, this.password);
+  return bcrypt.compare(password, this.password);
 };
 
-module.exports = model('user', userSchema);
+module.exports = model("user", userSchema);
