@@ -12,6 +12,7 @@ import {
   Checkbox,
   Flex,
   Text,
+  Button,
   useToast
 } from "@chakra-ui/react";
 import { setToast } from "../../utils/extraFunctions";
@@ -22,62 +23,126 @@ import axios from "axios";
 import { updateCartDetails } from "../../redux/features/cart/actions";
 import { useNavigate } from "react-router-dom";
 
+/* ================= INITIAL FORM ================= */
+const initState = {
+  firstName: "",
+  lastName: "",
+  addressLine1: "",
+  addressLine2: "",
+  locality: "",
+  pinCode: "",
+  state: "",
+  country: "",
+  email: "",
+  mobile: "",
+};
+
 export const Checkout = () => {
+  /* ================= AUTH DATA ================= */
+  const { token, user } = useSelector((state) => state.authReducer);
+
   const { orderSummary, cartProducts } = useSelector(
     (state) => state.cartReducer,
     shallowEqual
   );
-  const token = useSelector((state) => state.authReducer.token);
 
-  const initState = {
-    firstName: "",
-    lastName: "",
-    addressLine1: "",
-    addressLine2: "",
-    locality: "",
-    pinCode: "",
-    state: "",
-    country: "",
-    email: "",
-    mobile: "",
-  };
-
+  /* ================= STATE ================= */
   const [form, setForm] = useState(initState);
+  const [savedAddresses, setSavedAddresses] = useState([]);
   const [saveAddress, setSaveAddress] = useState(false);
+  const [isUsingSavedAddress, setIsUsingSavedAddress] = useState(false);
+  const [originalSavedAddress, setOriginalSavedAddress] = useState(null);
 
   const toast = useToast();
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  // 🔹 Handle input change
+  /* =====================================================
+     STEP 2: AUTO-FILL EMAIL FROM LOGGED-IN USER
+  ===================================================== */
+  useEffect(() => {
+    if (user?.email) {
+      setForm((prev) => ({
+        ...prev,
+        email: user.email,
+      }));
+    }
+  }, [user?.email]);
+
+  /* =====================================================
+     FETCH SAVED ADDRESSES
+  ===================================================== */
+  useEffect(() => {
+    if (!token) return;
+
+    axios
+      .get("/users/addresses", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((res) => setSavedAddresses(res.data.addresses || []))
+      .catch(() => setSavedAddresses([]));
+  }, [token]);
+
+  /* =====================================================
+     INPUT CHANGE
+  ===================================================== */
   const handleInputChange = ({ target: { name, value } }) => {
-    setForm({ ...form, [name]: value });
+    const updatedForm = { ...form, [name]: value };
+    setForm(updatedForm);
+
+    if (isUsingSavedAddress && originalSavedAddress) {
+      const isModified = Object.keys(originalSavedAddress).some(
+        (key) => originalSavedAddress[key] !== updatedForm[key]
+      );
+
+      if (isModified) {
+        setIsUsingSavedAddress(false);
+        setSaveAddress(true);
+      }
+    }
   };
 
-  // 🔹 Save address ONLY if checkbox is checked
+  /* =====================================================
+     USE SAVED ADDRESS
+  ===================================================== */
+  const handleUseAddress = (address) => {
+    const filledAddress = {
+      firstName: address.firstName || "",
+      lastName: address.lastName || "",
+      addressLine1: address.addressLine1 || "",
+      addressLine2: address.addressLine2 || "",
+      locality: address.locality || "",
+      pinCode: address.pinCode || "",
+      state: address.state || "",
+      country: address.country || "",
+      email: address.email || user?.email || "",
+      mobile: address.mobile || "",
+    };
+
+    setForm(filledAddress);
+    setOriginalSavedAddress(filledAddress);
+    setIsUsingSavedAddress(true);
+    setSaveAddress(false);
+  };
+
+  /* =====================================================
+     STEP 4: SAVE ADDRESS (EMAIL INCLUDED)
+  ===================================================== */
   const saveAddressIfNeeded = async () => {
-    if (!saveAddress) {
-      console.log("➡️ Save address unchecked — skipping DB save");
-      return;
-    }
+    if (!saveAddress) return;
 
     try {
-      console.log("📤 Saving address to DB:", form);
-
       await axios.post("/users/addresses", form, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      console.log("✅ Address saved in MongoDB");
-
       toast({
-        title: "Address saved to your account",
+        title: "Address saved successfully",
         status: "success",
         duration: 3000,
         isClosable: true,
       });
-    } catch (error) {
-      console.error("❌ Failed to save address", error);
+    } catch {
       toast({
         title: "Failed to save address",
         status: "error",
@@ -87,42 +152,32 @@ export const Checkout = () => {
     }
   };
 
-  // 🔹 Validation
+  /* =====================================================
+     VALIDATION
+  ===================================================== */
   const handleFormValidation = (form) => {
     const isEmpty = isCheckoutFormEmpty(form);
-    if (!isEmpty.status) {
-      setToast(toast, isEmpty.message, "error");
-      return false;
-    }
+    if (!isEmpty.status) return setToast(toast, isEmpty.message, "error");
 
     const isEmail = validateEmail(form.email);
-    if (!isEmail.status) {
-      setToast(toast, isEmail.message, "error");
-      return false;
-    }
+    if (!isEmail.status) return setToast(toast, isEmail.message, "error");
 
     const isPinCode = validatePinCode(form.pinCode);
-    if (!isPinCode.status) {
-      setToast(toast, isPinCode.message, "error");
-      return false;
-    }
+    if (!isPinCode.status) return setToast(toast, isPinCode.message, "error");
 
     const isMobile = validateMobile(form.mobile);
-    if (!isMobile.status) {
-      setToast(toast, isMobile.message, "error");
-      return false;
-    }
+    if (!isMobile.status) return setToast(toast, isMobile.message, "error");
 
     return true;
   };
 
-  // 🔹 Submit checkout
+  /* =====================================================
+     SUBMIT
+  ===================================================== */
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-
     if (!handleFormValidation(form)) return;
 
-    // ✅ Save address only if checkbox is checked
     await saveAddressIfNeeded();
 
     try {
@@ -142,9 +197,7 @@ export const Checkout = () => {
             },
             orderSummary,
           },
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
+          { headers: { Authorization: `Bearer ${token}` } }
         );
 
         dispatch(updateCartDetails());
@@ -163,12 +216,14 @@ export const Checkout = () => {
         dispatch,
         navigate
       );
-    } catch (error) {
-      console.error("❌ Checkout failed", error);
+    } catch {
       setToast(toast, "Checkout failed", "error");
     }
   };
 
+  /* =====================================================
+     UI
+  ===================================================== */
   return (
     <Box
       p="20px"
@@ -179,13 +234,50 @@ export const Checkout = () => {
       gap="10%"
       gridTemplateColumns={["100%", "100%", "55% 35%"]}
     >
-      {/* 🔹 LEFT */}
       <Box>
-        <CheckoutForm onChange={handleInputChange} />
+        <Box mb="6">
+          <Text fontSize="20px" fontWeight={600} mb="3">
+            Saved Addresses
+          </Text>
+
+          {savedAddresses.length > 0 ? (
+            savedAddresses.map((addr, i) => (
+              <Box
+                key={i}
+                p="4"
+                mb="3"
+                border="1px solid #e2e8f0"
+                borderRadius="8px"
+              >
+                <Text fontWeight={600}>
+                  {addr.firstName} {addr.lastName}
+                </Text>
+                <Text fontSize="14px">
+                  {addr.addressLine1}, {addr.locality}
+                </Text>
+                <Text fontSize="14px">
+                  {addr.state}, {addr.country} - {addr.pinCode}
+                </Text>
+                <Text fontSize="14px">{addr.email}</Text>
+
+                <Button size="sm" mt="2" onClick={() => handleUseAddress(addr)}>
+                  Use this address
+                </Button>
+              </Box>
+            ))
+          ) : (
+            <Text fontSize="14px" color="gray.500">
+              No saved addresses found
+            </Text>
+          )}
+        </Box>
+
+        <CheckoutForm form={form} onChange={handleInputChange} />
 
         <Flex mt="5">
           <Checkbox
             isChecked={saveAddress}
+            isDisabled={isUsingSavedAddress}
             onChange={(e) => setSaveAddress(e.target.checked)}
           >
             Save this address to my account
@@ -193,7 +285,6 @@ export const Checkout = () => {
         </Flex>
       </Box>
 
-      {/* 🔹 RIGHT */}
       <CheckoutOrderSummary
         onClick={handleFormSubmit}
         orderSummary={orderSummary}
